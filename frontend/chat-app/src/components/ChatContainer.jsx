@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeleton/MessageSkele";
+
 import useAuthhook from "../hooks/useAuthhook";
 import { formatMessageTime } from "../lib/utils";
+import axiosInstance from "../lib/axios";
 import toast from "react-hot-toast";
 
 const ChatContainer = () => {
+
   const {
     messages,
     getMessages,
@@ -17,76 +20,125 @@ const ChatContainer = () => {
     subscribeToMessages,
     unsubscribeFromMessages,
   } = useChathook();
-  const { authUser } = useAuthhook();
+
+  const { authUser, socket } = useAuthhook();
 
   const messageEndRef = useRef(null);
-  const [pinInput, setPinInput] = useState("");
 
-  const exemptRoles = ["Technical Support", "Pre-Sales Consultation", "Sales And Billing"];
-  const isExempted = exemptRoles.includes(authUser?.fullName);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [verified, setVerified] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
 
-  const [pinVerified, setPinVerified] = useState(isExempted || authUser?.pinVerified || false);
 
-  useEffect(() => {
-    if (pinVerified) {
-      getMessages(selectedUser._id);
-      subscribeToMessages();
+  const handleVerify = async () => {
 
-      return () => unsubscribeFromMessages();
-    }
-  }, [selectedUser._id, pinVerified]);
+    try {
 
-  useEffect(() => {
-    if (messageEndRef.current && messages) {
-      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
+      await axiosInstance.post("/auth/verify-password", {
+        password: passwordInput,
+      });
 
-  const handlePinSubmit = () => {
-    if (isExempted) return; // Do nothing if exempted
-    if (pinInput === authUser?.pin) {
-      setPinVerified(true);
-    } else {
-      toast.error("Invalid PIN. Please try again.");
+      setVerified(true);
+
+    } catch (error) {
+
+      toast.error("Incorrect password");
+
     }
   };
 
-  if (!pinVerified) {
+
+  useEffect(() => {
+
+    if (!selectedUser?._id || !verified) return;
+
+    getMessages(selectedUser._id);
+    subscribeToMessages();
+
+    return () => unsubscribeFromMessages();
+
+  }, [selectedUser?._id, verified]);
+
+
+  useEffect(() => {
+
+    if (!socket) return;
+
+    socket.on("typing", () => {
+      setIsTyping(true);
+    });
+
+    socket.on("stopTyping", () => {
+      setIsTyping(false);
+    });
+
+    return () => {
+      socket.off("typing");
+      socket.off("stopTyping");
+    };
+
+  }, [socket]);
+
+
+  useEffect(() => {
+
+    if (messageEndRef.current && messages) {
+
+      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
+
+    }
+
+  }, [messages]);
+
+
+  if (!verified) {
+
     return (
+
       <div className="flex-1 flex flex-col overflow-auto">
+
         <ChatHeader />
+
         <div className="p-6 space-y-4 flex-1 flex flex-col justify-center items-center text-center">
+
           <div className="chat chat-start">
-            <div className="chat-bubble text-md">🔒 Please verify your PIN to start chatting.</div>
+
+            <div className="chat-bubble text-md">
+
+              🔒 Please enter your password to start chatting.
+
+            </div>
+
           </div>
+
           <div className="flex gap-2">
+
             <input
               type="password"
               className="input input-bordered"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              placeholder="Enter PIN"
-              disabled={isExempted}
+              placeholder="Enter Password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
             />
+
             <button
-              onClick={handlePinSubmit}
+              onClick={handleVerify}
               className="btn btn-primary"
-              disabled={isExempted}
             >
               Verify
             </button>
+
           </div>
-          {isExempted && (
-            <p className="text-xs text-gray-500 mt-2">
-              PIN verification not required for role: <strong>{authUser?.fullName}</strong>
-            </p>
-          )}
+
         </div>
+
       </div>
     );
   }
 
+
   if (isMessagesLoading) {
+
     return (
       <div className="flex-1 flex flex-col overflow-auto">
         <ChatHeader />
@@ -96,49 +148,86 @@ const ChatContainer = () => {
     );
   }
 
+
   return (
+
     <div className="flex-1 flex flex-col overflow-auto">
+
       <ChatHeader />
+
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
         {messages.map((message) => (
+
           <div
             key={message._id}
-            className={`chat ${message.senderId === authUser._id ? "chat-end" : "chat-start"}`}
+            className={`chat ${
+              message.senderId === authUser._id ? "chat-end" : "chat-start"
+            }`}
             ref={messageEndRef}
           >
+
             <div className="chat-image avatar">
+
               <div className="size-10 rounded-full border">
+
                 <img
                   src={
                     message.senderId === authUser._id
                       ? authUser.profilePic || "/avatar.png"
                       : selectedUser.profilePic || "/avatar.png"
                   }
-                  alt="profile pic"
+                  alt="profile"
                 />
+
               </div>
+
             </div>
+
+
             <div className="chat-header mb-1">
+
               <time className="text-xs opacity-50 ml-1">
                 {formatMessageTime(message.createdAt)}
               </time>
+
             </div>
+
+
             <div className="chat-bubble flex flex-col">
+
               {message.image && (
+
                 <img
                   src={message.image}
                   alt="Attachment"
                   className="sm:max-w-[200px] rounded-md mb-2"
                 />
+
               )}
+
               {message.text && <p>{message.text}</p>}
+
             </div>
+
           </div>
+
         ))}
+
+        {isTyping && (
+          <p className="text-sm text-gray-400 px-2">
+            {selectedUser.fullName} is typing...
+          </p>
+        )}
+
       </div>
+
       <MessageInput />
+
     </div>
+
   );
+
 };
 
 export default ChatContainer;

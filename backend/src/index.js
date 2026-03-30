@@ -1,29 +1,29 @@
-import express from "express"
-import dotenv from "dotenv"
-import authRoutes from "./routes/auth.route.js"
-import messageRoutes from "./routes/message.route.js"
-import cookieParser from "cookie-parser"
+import express from "express";
+import dotenv from "dotenv";
+dotenv.config();
 
+import cookieParser from "cookie-parser";
+import cors from "cors";
 
+import authRoutes from "./routes/auth.route.js";
+import messageRoutes from "./routes/message.route.js";
 
 import { db } from "./lib/db.js";
-import { app,server } from "./lib/socket.js"
-import cors from "cors"
+import { app, server } from "./lib/socket.js";
 
+const PORT = process.env.PORT || 5000;
 
-dotenv.config({ path: '../.env' });
+// Middleware
+app.use(express.json());
+app.use(cookieParser());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  })
+);
 
-
-const PORT= process.env.PORT || 3000;
-
-app.use(express.json()) // to extract the data in json out of body
-app.use(cookieParser())
-app.use(cors({
-   origin: ['http://localhost:5173', 'https://link-up-9pa0.onrender.com'],
-  credentials: true
-}));
-
-
+// Dummy Q&A API
 const predefinedQA = [
   { question: "What services do you offer?", answer: "We provide AI automation, chatbot integration, and data scraping solutions." },
   { question: "How can I contact support?", answer: "You can reach us at support@example.com." },
@@ -31,15 +31,17 @@ const predefinedQA = [
   { question: "What is your business model?", answer: "We provide Fintech services" },
 ];
 
-app.get('/api/questions', (req, res) => {
+app.get("/api/questions", (req, res) => {
   res.json(predefinedQA);
 });
 
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/messages", messageRoutes);
 
-app.use('/api/auth',authRoutes)
-app.use('/api/messages',messageRoutes)
-
-server.listen(PORT, ()=>{
-    console.log(`Server is running on PORT ${PORT}`)
-    db()
-})
+// Start server AFTER DB connects
+db().then(() => {
+  server.listen(PORT, () => {
+    console.log(`Server running on PORT ${PORT} 🚀`);
+  });
+});
